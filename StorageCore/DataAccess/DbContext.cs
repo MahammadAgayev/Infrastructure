@@ -1,17 +1,10 @@
-﻿using System.Data.Common;
-using System.Threading;
+﻿using System;
+using System.Data.Common;
 
 namespace StorageCore.DataAccess
 {
     public class DbContext : IDbContext
     {
-        public ThreadLocal<DbTransaction> DbTransaction { get; private set; }
-
-        DbTransaction IDbContext.DbTransaction => DbTransaction.Value;
-
-        public void SetTransaction(DbTransaction dbTransaction)
-        {
-            this.DbTransaction.Value = dbTransaction;
-        }
+        public DbTransaction Transaction => throw new NotImplementedException();
     }
 }

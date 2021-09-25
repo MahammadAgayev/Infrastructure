@@ -7,11 +7,16 @@ using StorageCore.Domain.Abstract;
 
 namespace ApiTemplate.Extensions
 {
-    public static class AddDbExtensions
+    public static class DbExtensions
     {
         public static void AddDb(this IServiceCollection services, IConfiguration config)
         {
-            services.Configure<SqlDbOptions>(config.GetSection("SqlOptions"));
+            string cs = config.GetConnectionString("Default");
+
+            services.Configure<SqlDbOptions>(x =>
+            {
+                x.ConnectionString = cs;
+            });
 
             services.AddTransient<IQueryHelper, SqlQueryHelper>();
             services.AddTransient<IAsyncDbHelper, SqlAsyncDbHelper>();

@@ -1,10 +1,10 @@
-﻿using System.Data.Common;
-using System.Threading;
+﻿using System;
+using System.Data.Common;
 
 namespace StorageCore.DataAccess
 {
     public interface IDbContext
     {
-        DbTransaction DbTransaction { get; }
+        DbTransaction Transaction { get; }
     }
 }

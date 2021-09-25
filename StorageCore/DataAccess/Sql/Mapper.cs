@@ -7,9 +7,9 @@ namespace StorageCore.DataAccess.Sql
 {
     public static class Mapper
     {
-        public static User MapToUser(IDataReader reader)
+        public static Account MapToUser(IDataReader reader)
         {
-            return new User
+            return new Account
             {
                 Id = reader.Get<int>("id"),
                 Email = reader.Get<string>("Email"),

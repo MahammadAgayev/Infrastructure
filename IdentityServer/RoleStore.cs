@@ -14,12 +14,14 @@ namespace IdentityServer
             _untiofwork = unitOfWork;
         }
 
-        public async Task<IdentityResult> CreateAsync(Role role, CancellationToken cancellationToken)
+        public Task<IdentityResult> CreateAsync(Role role, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await _untiofwork.RoleRepository.CreateAsync(role);
+            //await _untiofwork.RoleRepository.CreateAsync(role);
 
-            return IdentityResult.Success;
+            //because of the lack of transaction cannot perform create on store
+
+            return Task.FromResult(IdentityResult.Success);
         }
 
         public Task<IdentityResult> UpdateAsync(Role role, CancellationToken cancellationToken)

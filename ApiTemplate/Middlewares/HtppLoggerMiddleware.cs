@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.IO;
 
-namespace IdentityService.MIddlewares
+namespace ApiTemplate.Middlewares
 {
     public class HttpLoggerMiddleware
     {

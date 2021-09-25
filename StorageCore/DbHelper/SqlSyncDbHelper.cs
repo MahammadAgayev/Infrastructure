@@ -6,16 +6,21 @@ using System.Data.SqlClient;
 using System.Diagnostics;
 using System.Linq;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using StorageCore.DbHelper.Abstraction;
 
 namespace StorageCore.DbHelper
 {
     public class SqlSyncDbHelper : ISyncDbHelper
     {
-        private readonly ILogger<SqlAsyncDbHelper> _logger;
+        private readonly ILogger<SqlSyncDbHelper> _logger;
         private readonly string _connectionString;
 
-        public SqlSyncDbHelper(SqlDbOptions options, ILogger<SqlAsyncDbHelper> logger)
+        public SqlSyncDbHelper(IOptions<SqlDbOptions> options, ILogger<SqlSyncDbHelper> logger)
+          : this(options?.Value, logger)
+        { }
+
+        public SqlSyncDbHelper(SqlDbOptions options, ILogger<SqlSyncDbHelper> logger)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -28,13 +33,13 @@ namespace StorageCore.DbHelper
           => this.ExecuteNonQuery(query, this.convertToDbParameterArray(parameters));
 
         public int ExecuteNonQuery(string query, DbTransaction tx, IDictionary<string, object> parameters = null)
-         =>  this.ExecuteNonQuery(query, tx, this.convertToDbParameterArray(parameters));
+         => this.ExecuteNonQuery(query, tx, this.convertToDbParameterArray(parameters));
 
         public int ExecuteNonQuery(string query, params DbParameter[] parameters)
           => this.callDbWithResult(this.buildExecuteNonQueryAction(query, tx: null, parameters));
 
-        public  int ExecuteNonQuery(string query, DbTransaction tx, params DbParameter[] parameters)
-         =>  this.callDbWithResult(tx, this.buildExecuteNonQueryAction(query, tx, parameters));
+        public int ExecuteNonQuery(string query, DbTransaction tx, params DbParameter[] parameters)
+         => this.callDbWithResult(tx, this.buildExecuteNonQueryAction(query, tx, parameters));
 
         public object ExecuteScalar(string query, IDictionary<string, object> parameters = null)
           => this.ExecuteScalar(query, this.convertToDbParameterArray(parameters));
@@ -43,14 +48,14 @@ namespace StorageCore.DbHelper
           => this.ExecuteScalar(query, tx, this.convertToDbParameterArray(parameters));
 
         public object ExecuteScalar(string query, params DbParameter[] parameters)
-          =>  this.callDbWithResult(this.buildExecuteScalarAction(query, tx: null, parameters));
+          => this.callDbWithResult(this.buildExecuteScalarAction(query, tx: null, parameters));
 
         public object ExecuteScalar(string query, DbTransaction tx, params DbParameter[] parameters)
-          =>  this.callDbWithResult(tx, this.buildExecuteScalarAction(query, tx, parameters));
+          => this.callDbWithResult(tx, this.buildExecuteScalarAction(query, tx, parameters));
 
         public T GetScalar<T>(string query, params DbParameter[] parameters)
         {
-            object value =  this.ExecuteScalar(query, parameters);
+            object value = this.ExecuteScalar(query, parameters);
 
             value = value == DBNull.Value ? default : value;
 
@@ -58,29 +63,16 @@ namespace StorageCore.DbHelper
         }
 
         public T GetScalar<T>(string query, IDictionary<string, object> parameters = null)
-         =>  this.GetScalar<T>(query, this.convertToDbParameterArray(parameters));
+         => this.GetScalar<T>(query, this.convertToDbParameterArray(parameters));
 
         public IList<T> GetData<T>(string query, Func<IDataReader, T> entityReader, IDictionary<string, object> parameters = null)
-            =>  this.GetData(query, entityReader, this.convertToDbParameterArray(parameters));
+            => this.GetData(query, entityReader, this.convertToDbParameterArray(parameters));
 
-        public IList<T>  GetData<T>(string query, Func<IDataReader, T> entityReader, params DbParameter[] parameters)
-          =>  this.callDbWithResult(
-               conn =>
-              {
-                  using (var command = this.createCommand(conn, query, parameters))
-                  {
-                      using (var reader =  command.ExecuteReader())
-                      {
-                          var sw = Stopwatch.StartNew();
+        public IList<T> GetData<T>(string query, Func<IDataReader, T> entityReader, params DbParameter[] parameters)
+          => this.callDbWithResult(this.buildGetDataAction(query, tx: null, entityReader, parameters));
 
-                          var result = this.readList(reader as SqlDataReader, entityReader);
-
-                          this.logQuery(query, sw.Elapsed.TotalMilliseconds, parameters);
-
-                          return result;
-                      }
-                  }
-              });
+        public IList<T> GetData<T>(string query, DbTransaction tx, Func<IDataReader, T> entityReader, params DbParameter[] parameters)
+          => this.callDbWithResult(this.buildGetDataAction(query, tx, entityReader, parameters));
 
         public DbParameter CreateParameter(string name, object value, DbType type, ParameterDirection direction = ParameterDirection.Input)
             => new SqlParameter
@@ -137,6 +129,30 @@ namespace StorageCore.DbHelper
                     this.logQuery(query, sw.Elapsed.TotalMilliseconds, parameters);
 
                     return result;
+                }
+            };
+        }
+        private Func<DbConnection, IList<T>> buildGetDataAction<T>(string query, DbTransaction tx, Func<IDataReader, T> entityReader, params DbParameter[] parameters)
+        {
+            return  conn =>
+            {
+                using (var command = this.createCommand(conn, query, parameters))
+                {
+                    if (tx != null)
+                    {
+                        command.Transaction = tx;
+                    }
+
+                    using (var reader =  command.ExecuteReader())
+                    {
+                        var sw = Stopwatch.StartNew();
+
+                        var result = this.readList(reader as SqlDataReader, entityReader);
+
+                        this.logQuery(query, sw.Elapsed.TotalMilliseconds, parameters);
+
+                        return result;
+                    }
                 }
             };
         }

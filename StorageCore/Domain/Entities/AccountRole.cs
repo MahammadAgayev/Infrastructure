@@ -1,9 +1,9 @@
 ﻿namespace StorageCore.Domain.Entities
 {
-    public class UserRole 
+    public class AccountRole 
     {
         public int Id { get; set; }
-        public User User { get; set; }
+        public Account User { get; set; }
         public Role Role { get; set; }
     }
 }

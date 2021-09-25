@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using StorageCore.DbHelper.Abstraction;
 using StorageCore.Extensions;
 
@@ -16,6 +17,10 @@ namespace StorageCore.DbHelper
     {
         private readonly ILogger<SqlAsyncDbHelper> _logger;
         private readonly string _connectionString;
+
+        public SqlAsyncDbHelper(IOptions<SqlDbOptions> options, ILogger<SqlAsyncDbHelper> logger)
+            : this(options?.Value, logger)
+        { }
 
         public SqlAsyncDbHelper(SqlDbOptions options, ILogger<SqlAsyncDbHelper> logger)
         {
@@ -66,23 +71,10 @@ namespace StorageCore.DbHelper
             => await this.GetDataAsync(query, entityReader, this.convertToDbParameterArray(parameters));
 
         public async Task<IList<T>> GetDataAsync<T>(string query, Func<IDataReader, T> entityReader, params DbParameter[] parameters)
-          => await this.callDbWithResult(
-              async conn =>
-              {
-                  using (var command = this.createCommand(conn, query, parameters))
-                  {
-                      using (var reader = await command.ExecuteReaderAsync())
-                      {
-                          var sw = Stopwatch.StartNew();
+          => await this.callDbWithResult(this.buildGetDataAction(query, tx: null, entityReader, parameters));
 
-                          var result = await this.readList(reader as SqlDataReader, entityReader).AnyContext();
-
-                          this.logQuery(query, sw.Elapsed.TotalMilliseconds, parameters);
-
-                          return result;
-                      }
-                  }
-              });
+        public async Task<IList<T>> GetDataAsync<T>(string query, DbTransaction tx, Func<IDataReader, T> entityReader, params DbParameter[] parameters)
+          => await this.callDbWithResult(tx, this.buildGetDataAction(query, tx, entityReader, parameters));
 
         public DbParameter CreateParameter(string name, object value, DbType type, ParameterDirection direction = ParameterDirection.Input)
             => new SqlParameter
@@ -139,6 +131,32 @@ namespace StorageCore.DbHelper
                     this.logQuery(query, sw.Elapsed.TotalMilliseconds, parameters);
 
                     return result;
+                }
+            };
+        }
+
+        private Func<DbConnection, Task<IList<T>>> buildGetDataAction<T>(string query, DbTransaction tx, Func<IDataReader, T> entityReader, params DbParameter[] parameters)
+        {
+            return async conn =>
+            {
+                using (var command = this.createCommand(conn, query, parameters))
+                {
+
+                    if (tx != null)
+                    {
+                        command.Transaction = tx;
+                    }
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        var sw = Stopwatch.StartNew();
+
+                        var result = await this.readList(reader as SqlDataReader, entityReader).AnyContext();
+
+                        this.logQuery(query, sw.Elapsed.TotalMilliseconds, parameters);
+
+                        return result;
+                    }
                 }
             };
         }
@@ -220,7 +238,7 @@ namespace StorageCore.DbHelper
         private DbConnection getTransactionConnection(DbTransaction tx)
         {
             if (tx?.Connection == null)
-                throw new InvalidOperationException("Transaction and/or connection associated with it is null. please create transaction using 'IDal.GetDbTransaction' method.");
+                throw new InvalidOperationException("Transaction and/or connection associated with it is null.");
 
             return tx.Connection;
         }

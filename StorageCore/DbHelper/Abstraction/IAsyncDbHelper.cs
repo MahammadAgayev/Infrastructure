@@ -30,6 +30,7 @@ namespace StorageCore.DbHelper.Abstraction
         Task<IList<T>> GetDataAsync<T>(string query, Func<IDataReader, T> entityReader, IDictionary<string, object> parameters = null);
 
         Task<IList<T>> GetDataAsync<T>(string query, Func<IDataReader, T> entityReader, params DbParameter[] parameters);
+        Task<IList<T>> GetDataAsync<T>(string query, DbTransaction tx, Func<IDataReader, T> entityReader, params DbParameter[] parameters);
 
         Task<T> GetScalarAsync<T>(string query, IDictionary<string, object> parameters = null);
         Task<T> GetScalarAsync<T>(string query, params DbParameter[] parameters);

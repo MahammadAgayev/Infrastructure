@@ -1,14 +1,16 @@
-﻿namespace StorageCore.Domain.Abstract
+﻿using System;
+using System.Data.Common;
+using System.Threading.Tasks;
+
+namespace StorageCore.Domain.Abstract
 {
-    public interface IUnitOfWork
+    public interface IUnitOfWork : IDisposable
     {
-        public IUserRepository UserRepository { get; }
+        public IAccountRepository UserRepository { get; }
         public IUserRoleRepository UserRoleRepository { get; }
         public IRoleRepository RoleRepository { get; }
 
-        void CreateTransaction();
-
-        void Commit();
-        void Rollback();
+        DbTransaction CreateTransaction();
+        Task<DbTransaction> CreateTransactionAsync();
     }
 }

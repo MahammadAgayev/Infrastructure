@@ -1,7 +1,7 @@
 using ApiTemplate.Extensions;
 using AspNetCoreRateLimit;
 using CorrelationId;
-using IdentityService.MIddlewares;
+using ApiTemplate.Middlewares;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -35,6 +35,8 @@ namespace ApiTemplate
             services.AddSwagger(this.Configuration);
 
             services.AddDb(this.Configuration);
+
+            services.AddIdentity(this.Configuration);
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -58,6 +60,7 @@ namespace ApiTemplate
 
             app.UseRouting();
 
+            app.UseAuthentication();
             app.UseAuthorization();
 
             app.UseMiddleware<HttpLoggerMiddleware>();

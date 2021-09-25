@@ -1,15 +1,14 @@
 ﻿using System;
 using System.Net;
 using System.Threading.Tasks;
-using IdentityService.Constants;
-using IdentityService.Models;
+using IdentityServer.Exceptions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 using Newtonsoft.Json;
 
 
-namespace IdentityService.MIddlewares
+namespace ApiTemplate.Middlewares
 {
     public class ErrorHandlerMiddleware
     {
@@ -30,22 +29,59 @@ namespace IdentityService.MIddlewares
             {
                 await _next(context);
             }
+            catch (AuthenticateException ex)
+            {
+                _logger.LogInformation($"authentication failed: {ex.Message}");
+
+                await this.HandleErrorAsync(context, new ApiResponse
+                {
+                    ResultCode = (int)HttpStatusCode.BadRequest,
+                    Result = "login failed"
+                });
+            }
+            catch (IdentityException ex)
+            {
+                _logger.LogInformation($"identity operation failed: {ex.Message}");
+
+                await this.HandleErrorAsync(context, new ApiResponse
+                {
+                    ResultCode = (int)HttpStatusCode.BadRequest,
+                    Result = "login failed"
+                });
+            }
+            catch (AppException ex)
+            {
+                _logger.LogWarning(ex, $"failed to operate request");
+
+                await this.HandleErrorAsync(context, new ApiResponse
+                {
+                    ResultCode = (int)HttpStatusCode.BadRequest,
+                    Result = "login failed"
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogCritical(ex, "Error occured while processing request");
 
-                var response = context.Response;
-
-                response.ContentType = "application/json";
-
-                response.StatusCode = (int)HttpStatusCode.InternalServerError;
-
-                var responseModel = new ApiResponse<object> { ResultCode = (int)HttpStatusCode.InternalServerError, ResultDescription = ResultDescriptions.Error };
-
-                string result = JsonConvert.SerializeObject(responseModel);
-
-                await response.WriteAsync(result);
+                await this.HandleErrorAsync(context, new ApiResponse
+                {
+                    ResultCode = (int)HttpStatusCode.InternalServerError,
+                    Result = "Request failed."
+                });
             }
+        }
+
+        private async Task HandleErrorAsync(HttpContext context, ApiResponse apiResponse)
+        {
+            var response = context.Response;
+
+            response.ContentType = "application/json";
+
+            response.StatusCode = apiResponse.ResultCode;
+
+            string result = JsonConvert.SerializeObject(apiResponse);
+
+            await response.WriteAsync(result);
         }
     }
 }

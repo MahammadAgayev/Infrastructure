@@ -1,14 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
-using IdentityServer.Abstarct;
+using IdentityServer.Abstract;
 using IdentityServer.Exceptions;
 using IdentityServer.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using StorageCore.Domain.Abstract;
 using StorageCore.Domain.Entities;
@@ -17,19 +19,25 @@ namespace IdentityServer
 {
     public class AccountService : IAccountService
     {
-        private readonly UserManager<User> _userManager;
-        private readonly SignInManager<User> _signInManager;
+        private readonly UserManager<Account> _userManager;
+        private readonly SignInManager<Account> _signInManager;
+        private readonly IUnitOfWork _unitOfWork;
 
         private readonly ILogger<AccountService> _logger;
 
         private readonly AccountOptions _options;
 
-        public AccountService(AccountOptions options, UserManager<User> userManager, SignInManager<User> signInManager, ILogger<AccountService> logger)
+        public AccountService(IOptions<AccountOptions> options, 
+            UserManager<Account> userManager, 
+            SignInManager<Account> signInManager, 
+            ILogger<AccountService> logger,
+            IUnitOfWork unitOfWork)
         {
-            _userManager = userManager;
-            _signInManager = signInManager;
-            _options = options;
-            _logger = logger;
+            _userManager = userManager ?? throw new ArgumentException(nameof(userManager));
+            _signInManager = signInManager ?? throw new ArgumentException(nameof(signInManager));
+            _options = options?.Value ?? throw new ArgumentException(nameof(options));
+            _logger = logger ?? throw new ArgumentException(nameof(logger));
+            _unitOfWork = unitOfWork ?? throw new ArgumentException(nameof(unitOfWork));
         }
 
         public async Task<AuthenticateResponse> Authenticate(EmailAuthenticateRequest request)
@@ -48,7 +56,7 @@ namespace IdentityServer
                 throw new AuthenticateException("PhoneNumber or password incorrect");
             }
 
-            string token = this.generateJwtToken(user);
+            string token = this.GenerateJwtToken(user);
 
             _logger.LogInformation("email auth request processed @request", request);
 
@@ -75,7 +83,7 @@ namespace IdentityServer
                 throw new AuthenticateException("PhoneNumber or password incorrect");
             }
 
-            string token = this.generateJwtToken(user);
+            string token = this.GenerateJwtToken(user);
 
             _logger.LogInformation("phone number auth request processed @request", request);
 
@@ -86,37 +94,64 @@ namespace IdentityServer
             };
         }
 
-        public async Task CreateAccountRequest(CreateAccountRequest request)
+        public async Task CreateAccountRequest(CreateAccountRequest request, DbTransaction transaction)
         {
             if ((await _userManager.FindByEmailAsync(request.Email)) != null)
             {
                 throw new IdentityException($"Email '{request.Email}' already exists.");
             }
 
-            var user = new User
+            if ((await _userManager.FindByNameAsync(request.PhoneNumber)) != null)
+            {
+                throw new IdentityException($"PhoneNumber '{request.PhoneNumber}' already exists.");
+            }
+
+            var user = new Account
             {
                 Created = DateTime.Now,
                 Updated = DateTime.Now,
                 Email = request.Email,
+                NormalizedEmail = request.Email.ToUpperInvariant(),
                 PhoneNumber = request.PhoneNumber,
             };
 
-            var result = await _userManager.CreateAsync(user, request.Password);
-
-            if (!result.Succeeded)
+            foreach (var validator in _userManager.UserValidators)
             {
-                throw new IdentityException(this.extarctErrorString(result));
+                var validationRes = await validator.ValidateAsync(_userManager, user);
 
+                if(!validationRes.Succeeded)
+                {
+                    throw new IdentityException(this.ExtractErrorString(validationRes));
+                }
             }
 
-            await _userManager.AddToRoleAsync(user, request.Rolename);
+            foreach (var validator in _userManager.PasswordValidators)
+            {
+                var validationRes = await validator.ValidateAsync(_userManager, user, request.Password);
+
+                if (!validationRes.Succeeded)
+                {
+                    throw new IdentityException(this.ExtractErrorString(validationRes));
+                }
+            }
+
+            user.PasswordHash = _userManager.PasswordHasher.HashPassword(user, request.Password);
+
+            await _unitOfWork.UserRepository.CreateAsync(user, transaction);
+
+            var role = await _unitOfWork.RoleRepository.GetAsync(request.Rolename.ToUpperInvariant());
+
+            await _unitOfWork.UserRoleRepository.CreateAsync(new AccountRole
+            {
+                Role = role,
+                User = user
+            }, transaction);
 
             _logger.LogInformation("create account processed @request", request);
         }
 
 
-
-        private string generateJwtToken(User account)
+        private string GenerateJwtToken(Account account)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             byte[] key = Encoding.ASCII.GetBytes(_options.Secret);
@@ -136,7 +171,7 @@ namespace IdentityServer
         }
 
 
-        private string extarctErrorString(IdentityResult result)
+        private string ExtractErrorString(IdentityResult result)
         {
             var builder = new StringBuilder();
 

@@ -11,13 +11,6 @@ namespace ApiTemplate
     {
         public static void Main(string[] args)
         {
-            var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-            var settingsJson = environment == Environments.Development ? "appsettings.Development.json" : "appsettings.json";
-
-            var configuration = new ConfigurationBuilder()
-             .AddJsonFile(settingsJson)
-             .Build();
-
             var logger = NLogBuilder.ConfigureNLog("nlog.config").GetCurrentClassLogger();
 
             try

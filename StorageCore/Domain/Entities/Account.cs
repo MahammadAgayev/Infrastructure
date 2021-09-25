@@ -2,7 +2,7 @@
 
 namespace StorageCore.Domain.Entities
 {
-    public class User 
+    public class Account 
     {
         public int Id { get; set; }
         public DateTime Created { get; set; } 

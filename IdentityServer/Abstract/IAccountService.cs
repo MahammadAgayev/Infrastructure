@@ -1,13 +1,14 @@
-﻿using System.Threading.Tasks;
+﻿using System.Data.Common;
+using System.Threading.Tasks;
 using IdentityServer.Models;
 
-namespace IdentityServer.Abstarct
+namespace IdentityServer.Abstract
 {
     public interface IAccountService
     {
         Task<AuthenticateResponse> Authenticate(EmailAuthenticateRequest request);
         Task<AuthenticateResponse> Authenticate(PhoneNumberAuthenticateRequest request);
 
-        Task CreateAccountRequest(CreateAccountRequest request);
+        Task CreateAccountRequest(CreateAccountRequest request, DbTransaction transaction);
     }
 }
