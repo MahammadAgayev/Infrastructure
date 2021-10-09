@@ -12,5 +12,6 @@
 
         public string Name { get; init; }
         public Comparison Comparison { get; init; }
+        public object Value { get; set; }
     }
 }

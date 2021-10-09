@@ -12,12 +12,12 @@ namespace StorageCore.DataAccess.Sql
     public class SqlUserRoleRepository : IUserRoleRepository
     {
         private readonly IAsyncDbHelper _asyncDbHelper;
-        private readonly IQueryHelper _queryHelper;
+        private readonly IAsyncOrmDbHelper _asyncOrmDbHelper;
 
-        public SqlUserRoleRepository(IAsyncDbHelper asyncDbHelper, IQueryHelper queryHelper)
+        public SqlUserRoleRepository(IAsyncDbHelper asyncDbHelper, IAsyncOrmDbHelper asyncOrmDbHelper)
         {
             _asyncDbHelper = asyncDbHelper;
-            _queryHelper = queryHelper;
+            _asyncOrmDbHelper = asyncOrmDbHelper;
         }
 
         public async Task CreateAsync(AccountRole userRole, DbTransaction transaction)
@@ -28,11 +28,7 @@ namespace StorageCore.DataAccess.Sql
                  { "accountid", userRole.User.Id }
              };
 
-            string insertQuery = _queryHelper.GetInsertQuery("AccountRoles", @params);
-
-            string query = $"{insertQuery} SELECT SCOPE_IDENTITY()";
-
-            userRole.Id = Convert.ToInt32(await _asyncDbHelper.ExecuteScalarAsync(query, transaction, @params));
+            userRole.Id = await _asyncOrmDbHelper.Insert("AccountRoles", @params, transaction);
         }
 
         public async Task DeleteAsync(Account user, string rolename, DbTransaction transaction)

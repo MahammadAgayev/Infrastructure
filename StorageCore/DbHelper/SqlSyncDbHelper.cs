@@ -71,9 +71,6 @@ namespace StorageCore.DbHelper
         public IList<T> GetData<T>(string query, Func<IDataReader, T> entityReader, params DbParameter[] parameters)
           => this.callDbWithResult(this.buildGetDataAction(query, tx: null, entityReader, parameters));
 
-        public IList<T> GetData<T>(string query, DbTransaction tx, Func<IDataReader, T> entityReader, params DbParameter[] parameters)
-          => this.callDbWithResult(this.buildGetDataAction(query, tx, entityReader, parameters));
-
         public DbParameter CreateParameter(string name, object value, DbType type, ParameterDirection direction = ParameterDirection.Input)
             => new SqlParameter
             {

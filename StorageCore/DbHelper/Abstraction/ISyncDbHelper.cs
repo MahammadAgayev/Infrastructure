@@ -28,8 +28,6 @@ namespace StorageCore.DbHelper.Abstraction
         IList<T> GetData<T>(string query, Func<IDataReader, T> entityReader, IDictionary<string, object> parameters = null);
 
         IList<T> GetData<T>(string query, Func<IDataReader, T> entityReader, params DbParameter[] parameters);
-        IList<T> GetData<T>(string query, DbTransaction tx, Func<IDataReader, T> entityReader, params DbParameter[] parameters);
-
 
         T GetScalar<T>(string query, IDictionary<string, object> parameters = null);
 

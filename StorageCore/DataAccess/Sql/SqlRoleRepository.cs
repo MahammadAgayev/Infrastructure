@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
@@ -12,12 +11,12 @@ namespace StorageCore.DataAccess.Sql
     public class SqlRoleRepository : IRoleRepository
     {
         private readonly IAsyncDbHelper _asyncDbHelper;
-        private readonly IQueryHelper _queryHelper;
+        private readonly IAsyncOrmDbHelper _asyncOrmDbHelper;
 
-        public SqlRoleRepository(IAsyncDbHelper asyncDbHelper, IQueryHelper queryHelper)
+        public SqlRoleRepository(IAsyncDbHelper asyncDbHelper, IAsyncOrmDbHelper asyncOrmDbHelper)
         {
             _asyncDbHelper = asyncDbHelper;
-            _queryHelper = queryHelper;
+            _asyncOrmDbHelper = asyncOrmDbHelper;
         }
 
         public async Task CreateAsync(Role role, DbTransaction transaction)
@@ -28,11 +27,7 @@ namespace StorageCore.DataAccess.Sql
                 { "NormalizedName", role.NormalizedName }
             };
 
-            string insertQuery = _queryHelper.GetInsertQuery("Roles", @params);
-
-            string query = $"{insertQuery} SELECT SCOPE_IDENTITY()";
-
-            role.Id = Convert.ToInt32(await _asyncDbHelper.ExecuteScalarAsync(query, transaction, @params));
+            role.Id = await _asyncOrmDbHelper.Insert("Roles", @params, transaction);
         }
 
         public async Task<Role> GetAsync(string normalizedrolename)

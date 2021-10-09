@@ -6,9 +6,9 @@ namespace StorageCore.Domain.Abstract
 {
     public interface IUnitOfWork : IDisposable
     {
-        public IAccountRepository UserRepository { get; }
-        public IUserRoleRepository UserRoleRepository { get; }
-        public IRoleRepository RoleRepository { get; }
+        IAccountRepository UserRepository { get; }
+        IUserRoleRepository UserRoleRepository { get; }
+        IRoleRepository RoleRepository { get; }
 
         DbTransaction CreateTransaction();
         Task<DbTransaction> CreateTransactionAsync();

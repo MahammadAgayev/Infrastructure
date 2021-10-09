@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
@@ -13,13 +12,13 @@ namespace StorageCore.DataAccess.Sql
 {
     public class SqlAccountRepository : IAccountRepository
     {
+        private readonly IAsyncOrmDbHelper _asyncOrmDbHelper;
         private readonly IAsyncDbHelper _asyncDbHelper;
-        private readonly IQueryHelper _queryHelper;
 
-        public SqlAccountRepository(IAsyncDbHelper asyncDbHelper, IQueryHelper queryHelper)
+        public SqlAccountRepository(IAsyncOrmDbHelper asyncOrmDbHelper, IAsyncDbHelper asyncDbHelper)
         {
-            _asyncDbHelper = asyncDbHelper;
-            _queryHelper = queryHelper;
+            _asyncOrmDbHelper = asyncOrmDbHelper;
+            _asyncDbHelper = asyncDbHelper;  
         }
 
         public async Task CreateAsync(Account user, DbTransaction transaction)
@@ -36,11 +35,7 @@ namespace StorageCore.DataAccess.Sql
                 { nameof(Account.Updated), user.Updated }
             };
 
-            string insertQuery = _queryHelper.GetInsertQuery("Accounts", @params);
-
-            string query = $"{insertQuery} SELECT SCOPE_IDENTITY()";
-
-            user.Id = Convert.ToInt32(await _asyncDbHelper.ExecuteScalarAsync(query, transaction, @params));
+            user.Id = await _asyncOrmDbHelper.Insert("Accounts", @params, transaction);
         }
 
         public async Task UpdateAsync(Account user, DbTransaction transaction)
@@ -58,9 +53,7 @@ namespace StorageCore.DataAccess.Sql
                 { nameof(Account.Updated), user.Updated }
             };
 
-            var query = _queryHelper.GetUpdateQuery("Accounts", @params, new Filter("Id", Comparison.Equal));
-
-            await _asyncDbHelper.ExecuteNonQueryAsync(query, transaction, @params);
+            await _asyncOrmDbHelper.Update("Accounts", @params, transaction, new Filter("Id", Comparison.Equal));
         }
 
         public async Task DeleteAsync(Account user, DbTransaction transaction)
