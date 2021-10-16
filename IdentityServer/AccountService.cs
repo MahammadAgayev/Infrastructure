@@ -27,9 +27,9 @@ namespace IdentityServer
 
         private readonly AccountOptions _options;
 
-        public AccountService(IOptions<AccountOptions> options, 
-            UserManager<Account> userManager, 
-            SignInManager<Account> signInManager, 
+        public AccountService(IOptions<AccountOptions> options,
+            UserManager<Account> userManager,
+            SignInManager<Account> signInManager,
             ILogger<AccountService> logger,
             IUnitOfWork unitOfWork)
         {
@@ -40,32 +40,6 @@ namespace IdentityServer
             _unitOfWork = unitOfWork ?? throw new ArgumentException(nameof(unitOfWork));
         }
 
-        public async Task<AuthenticateResponse> Authenticate(EmailAuthenticateRequest request)
-        {
-            var user = await _userManager.FindByEmailAsync(request.Email);
-
-            if (user is null)
-            {
-                throw new AuthenticateException("PhoneNumber or password incorrect");
-            }
-
-            var result = await _signInManager.PasswordSignInAsync(user, request.Password, false, lockoutOnFailure: false);
-
-            if (!result.Succeeded)
-            {
-                throw new AuthenticateException("PhoneNumber or password incorrect");
-            }
-
-            string token = this.GenerateJwtToken(user);
-
-            _logger.LogInformation("email auth request processed @request", request);
-
-            return new AuthenticateResponse
-            {
-                JwtToken = token,
-                RefreshToken = null
-            };
-        }
 
         public async Task<AuthenticateResponse> Authenticate(PhoneNumberAuthenticateRequest request)
         {
@@ -76,14 +50,29 @@ namespace IdentityServer
                 throw new AuthenticateException("PhoneNumber or password incorrect");
             }
 
-            var result = await _signInManager.PasswordSignInAsync(user, request.Password, false, lockoutOnFailure: false);
+            if (!await _userManager.IsInRoleAsync(user, request.RoleName))
+            {
+                throw new AuthenticateException("PhoneNumber or password incorrect");
+            }
+
+            if (request.CheckConfirmation == true && user.PhoneNumberConfirmed == false)
+            {
+                throw new AuthenticateException("Account not confirmed");
+            }
+
+            var result = await _signInManager.PasswordSignInAsync(user.PhoneNumber, request.Password, false, lockoutOnFailure: false);
 
             if (!result.Succeeded)
             {
                 throw new AuthenticateException("PhoneNumber or password incorrect");
             }
 
-            string token = this.GenerateJwtToken(user);
+            string token = null;
+
+            if (request.CreateToken)
+            {
+                token = this.GenerateJwtToken(user);
+            }
 
             _logger.LogInformation("phone number auth request processed @request", request);
 
@@ -94,17 +83,9 @@ namespace IdentityServer
             };
         }
 
-        public async Task CreateAccountRequest(CreateAccountRequest request, DbTransaction transaction)
+        public async Task<Account> CreateAccount(CreateAccountRequest request, DbTransaction transaction)
         {
-            if ((await _userManager.FindByEmailAsync(request.Email)) != null)
-            {
-                throw new IdentityException($"Email '{request.Email}' already exists.");
-            }
-
-            if ((await _userManager.FindByNameAsync(request.PhoneNumber)) != null)
-            {
-                throw new IdentityException($"PhoneNumber '{request.PhoneNumber}' already exists.");
-            }
+            await this.ValidateRequest(request);
 
             var user = new Account
             {
@@ -115,25 +96,7 @@ namespace IdentityServer
                 PhoneNumber = request.PhoneNumber,
             };
 
-            foreach (var validator in _userManager.UserValidators)
-            {
-                var validationRes = await validator.ValidateAsync(_userManager, user);
-
-                if(!validationRes.Succeeded)
-                {
-                    throw new IdentityException(this.ExtractErrorString(validationRes));
-                }
-            }
-
-            foreach (var validator in _userManager.PasswordValidators)
-            {
-                var validationRes = await validator.ValidateAsync(_userManager, user, request.Password);
-
-                if (!validationRes.Succeeded)
-                {
-                    throw new IdentityException(this.ExtractErrorString(validationRes));
-                }
-            }
+            await this.ValidateAccount(user, request.Password);
 
             user.PasswordHash = _userManager.PasswordHasher.HashPassword(user, request.Password);
 
@@ -147,9 +110,68 @@ namespace IdentityServer
                 User = user
             }, transaction);
 
-            _logger.LogInformation("create account processed @request", request);
+            _logger.LogInformation("create account processed {request}", request);
+
+            return user;
         }
 
+        public async Task<Account> CreateAccountSimulate(CreateAccountRequest request)
+        {
+            await this.ValidateRequest(request);
+
+            var user = new Account
+            {
+                Created = DateTime.Now,
+                Updated = DateTime.Now,
+                Email = request.Email,
+                NormalizedEmail = request.Email.ToUpperInvariant(),
+                PhoneNumber = request.PhoneNumber,
+            };
+
+            await this.ValidateAccount(user, request.Password);
+
+            var role = await _unitOfWork.RoleRepository.GetAsync(request.Rolename.ToUpperInvariant());
+
+            if (role is null)
+            {
+                throw new IdentityException("Apropiate role not found");
+            }
+
+            _logger.LogInformation("create account simulate processed {request}", request);
+
+            return user;
+        }
+
+        public async Task<GeneratePhoneConfirmationResponse> GeneratePhoneNumerConfirmation(GeneratePhoneConfirmationRequest request)
+        {
+            string code = await _userManager.GenerateChangePhoneNumberTokenAsync(request.Account, request.Account.PhoneNumber);
+
+            return new GeneratePhoneConfirmationResponse
+            {
+                Code = code
+            };
+        }
+
+        public async Task<bool> ConfirmPhoneNumber(ConfirmPhoneNumberRequest request, DbTransaction transaction)
+        {
+            var validated = await _userManager.VerifyChangePhoneNumberTokenAsync(request.Account, request.Code, request.Account.PhoneNumber);
+
+            if (validated)
+            {
+                request.Account.PhoneNumberConfirmed = true;
+                await _unitOfWork.UserRepository.UpdateAsync(request.Account, transaction);
+
+                _logger.LogInformation("Account phone number confirmed {request}", request);
+            }
+
+            return validated;
+        }
+
+
+        public async Task Logout()
+        {
+            await _signInManager.SignOutAsync();
+        }
 
         private string GenerateJwtToken(Account account)
         {
@@ -181,6 +203,42 @@ namespace IdentityServer
 
             }
             return builder.ToString();
+        }
+
+        private async Task ValidateRequest(CreateAccountRequest request)
+        {
+            if ((await _userManager.FindByEmailAsync(request.Email)) != null)
+            {
+                throw new IdentityException($"Email '{request.Email}' already exists.");
+            }
+
+            if ((await _userManager.FindByNameAsync(request.PhoneNumber)) != null)
+            {
+                throw new IdentityException($"PhoneNumber '{request.PhoneNumber}' already exists.");
+            }
+        }
+
+        private async Task ValidateAccount(Account account, string password)
+        {
+            foreach (var validator in _userManager.UserValidators)
+            {
+                var validationRes = await validator.ValidateAsync(_userManager, account);
+
+                if (!validationRes.Succeeded)
+                {
+                    throw new IdentityException(this.ExtractErrorString(validationRes));
+                }
+            }
+
+            foreach (var validator in _userManager.PasswordValidators)
+            {
+                var validationRes = await validator.ValidateAsync(_userManager, account, password);
+
+                if (!validationRes.Succeeded)
+                {
+                    throw new IdentityException(this.ExtractErrorString(validationRes));
+                }
+            }
         }
     }
 }

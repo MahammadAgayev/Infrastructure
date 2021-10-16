@@ -53,7 +53,7 @@ namespace IdentityServer
 
         public Task<string> GetNormalizedUserNameAsync(Account user, CancellationToken cancellationToken)
         {
-            return Task.FromResult(user.PhoneNumber);
+            return Task.FromResult(user.PhoneNumber.ToUpperInvariant());
         }
 
         public Task<string> GetUserIdAsync(Account user, CancellationToken cancellationToken)
